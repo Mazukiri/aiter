@@ -251,6 +251,25 @@ def launch_gemm_a8w4_tdm(
     ):
         # rocdl.disable_xdl_arb_stall()
 
+        # Perf-ceiling probe, NOT correct code. The
+        # amdgpu-expert-scheduling-mode attribute does two things: emit
+        # `s_setreg WAVE_SCHED_MODE, 2` and insert the s_wait_alu the mode then
+        # requires. Compiling with the attribute off and setting the register by
+        # hand keeps the fast mode while dropping every wait, which measures
+        # what the waits actually cost. The kernel races without them, so the
+        # result is wrong by construction -- use it only to decide whether
+        # chasing the remaining waits is worth anything.
+        import os as _os0
+
+        if const_expr(int(_os0.environ.get("FORCE_EXPERT_NOWAIT", "0"))):
+            _hw = arith.unwrap(arith.constant(2074, type=T.i32))
+            _v2 = arith.unwrap(arith.constant(2, type=T.i32))
+            from flydsl._mlir.dialects import llvm as _llvm_sr
+
+            _llvm_sr.call_intrinsic(
+                None, "llvm.amdgcn.s.setreg", [_hw, _v2], [], []
+            )
+
         K_TILES = K // tile_k
         A_KROW = K // A_PACK
         Kp16 = (K // 2) * 16
